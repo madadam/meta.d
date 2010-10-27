@@ -1,0 +1,20 @@
+Function facade generator for D
+===============================
+
+What the hell is this?
+----------------------
+
+This is a D language library for declaratively generating function facades.
+See the embeded documentation for more info.
+
+TODO
+----
+
+- Support translating more than one parameter
+- Add make install
+- Better README :)
+
+Legal
+-----
+
+Copyright (c) 2010 Adam Cigánek <adam.ciganek@gmail.com>. Released under the terms of MIT licence.
