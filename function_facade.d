@@ -30,15 +30,7 @@ import std.typetuple;
  *   OldType = type NewType will be cast to
  */
 mixin template FunctionFacade(string name, NewType, OldType) {
-  enum originalName = "." ~ name;
-  enum newName = demodulize(name);
-
-  alias ParameterTypeTuple!(mixin(originalName)) OriginalTypes;
-  alias translateTypes!(OldType, NewType, OriginalTypes) NewTypes;
-
-  mixin("ReturnType!(" ~ originalName ~ ") " ~
-        newName ~ "(" ~ parametersString!NewTypes ~ ")" ~
-        "{ return " ~ originalName ~ "(" ~ castsString!OriginalTypes ~ "); }");
+  mixin(source!(name, NewType, OldType));
 }
 
 version(unittest) {
@@ -82,6 +74,22 @@ unittest {
 }
 
 private {
+  string source(string name, NewType, OldType)() {
+    enum originalName = "." ~ name;
+
+    alias ParameterTypeTuple!(mixin(originalName)) OriginalTypes;
+    alias translateTypes!(OldType, NewType, OriginalTypes) NewTypes;
+
+    enum returnType = "ReturnType!(" ~ originalName ~ ")";
+    enum parameters = parametersString!NewTypes;
+    enum originalCall = originalName ~ "(" ~ castsString!OriginalTypes ~ ")";
+
+    enum signature = returnType ~ " " ~ demodulize(name) ~ " (" ~ parameters ~ ")";
+    enum implementation = "{ return " ~ originalCall ~ "; }";
+
+    return signature ~ " " ~ implementation;
+  }
+
   // parametersString
   unittest {
     static assert(""                  == parametersString!());
