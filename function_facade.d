@@ -1,7 +1,8 @@
 module function_facade;
 
+public import std.traits : ReturnType, ParameterTypeTuple;
+
 import std.conv;
-import std.traits;
 import std.typecons;
 import std.typetuple;
 
@@ -27,33 +28,24 @@ unittest {
   B b1 = B("bee1");
   B b2 = B("bee2");
 
-  mixin DefineFacade!(test1, A, B);
+  mixin Facade!(test1, A, B);
   assert("[bee1(A)]" == test1(b1));
 
-  mixin DefineFacade!(test2, A, B);
+  mixin Facade!(test2, A, B);
   assert("[bee1(A), bee2(A)]" == test2(b1, b2));
 
-  mixin DefineFacade!(test3, A, B);
+  mixin Facade!(test3, A, B);
   assert("[bee1(A), bee2]" == test3(b1, b2));
 }
 
 /**
  * TODO: Documentation here
  */
-mixin template DefineFacade(alias target, To, From) {
-  mixin(facadeSource!(target, To, From));
+mixin template Facade(alias target, To, From) {
+  mixin("ReturnType!target " ~ unqualifiedName!target ~
+        "(translateTypes!(To, From, ParameterTypeTuple!target) params) " ~
+        "{ return facade!(target, To, From)(params); }");
 }
-
-
-// facadeSource
-template facadeSource(alias target, To, From) {
-  enum facadeSource = q{ ReturnType!target } ~ unqualifiedName!target ~
-                      q{ (translateTypes!(To, From, ParameterTypeTuple!target) params) {
-                        return facade!(target, To, From)(params);
-                      }};
-}
-
-private:
 
 // facade
 unittest {
@@ -66,33 +58,18 @@ unittest {
 }
 
 template facade(alias target, To, From) {
-  alias facadeDetails!(target, To, From).result facade;
+  alias facadeImpl!(target, To, From).result facade;
 }
 
-template facadeDetails(alias target, To, From) {
-  alias ReturnType!target                      R;
-  alias ParameterTypeTuple!target              TargetTypes;
-  alias translateTypes!(To, From, TargetTypes) FacadeTypes;
+// facadeImpl
+template facadeImpl(alias target, To, From) {
+  alias ReturnType!target                   R;
+  alias ParameterTypeTuple!target           OldTypes;
+  alias translateTypes!(To, From, OldTypes) NewTypes;
 
-  R result(FacadeTypes params) {
-    return target(tupleCast!(Tuple!TargetTypes)(params).field);
+  R result(NewTypes params) {
+    return target(tupleCast!(Tuple!OldTypes)(params).field);
   }
-}
-
-// unqualifiedName
-unittest {
-  int a;
-
-  struct Outer {
-    static int inner;
-  }
-
-  static assert("a"     == unqualifiedName!a);
-  static assert("inner" == unqualifiedName!(Outer.inner));
-}
-
-template unqualifiedName(alias E) {
-  enum unqualifiedName = demodulize(__traits(identifier, E));
 }
 
 // translateTypes
@@ -114,6 +91,24 @@ template translateTypes(From, To, Types...) {
     alias TypeTuple!(translateType!(From, To, Types[0]), translateTypes!(From, To, Types[1 .. $]))
           translateTypes;
   }
+}
+
+private
+
+// unqualifiedName
+unittest {
+  int a;
+
+  struct Outer {
+    static int inner;
+  }
+
+  static assert("a"     == unqualifiedName!a);
+  static assert("inner" == unqualifiedName!(Outer.inner));
+}
+
+template unqualifiedName(alias E) {
+  enum unqualifiedName = demodulize(__traits(identifier, E));
 }
 
 // translateType
