@@ -1,75 +1,77 @@
 module function_facade;
 
-public import std.traits : ReturnType, ParameterTypeTuple;
-
 import std.conv;
+import std.traits;
 import std.typecons;
 import std.typetuple;
 
 version(unittest) {
-  struct A {
-    string name;
-  }
+  import std.stdio;
+
+  struct A { string name; }
 
   struct B {
     string name;
 
-    A opCast(T:A)() {
-      return A(this.name ~ "(A)");
+    A opCast(T:A)() { return A(this.name ~ "(A)"); }
+  }
+
+  struct C { string name; }
+
+  struct D {
+    string name;
+
+    C opCast(T:C)() {
+      return C(this.name ~ "(C)");
     }
   }
 
-  string test1(A a) { return "[" ~ a.name ~ "]"; }
-  string test2(A a1, A a2) { return "[" ~ a1.name ~ ", " ~ a2.name ~ "]"; }
-  string test3(A a1, B a2) { return "[" ~ a1.name ~ ", " ~ a2.name ~ "]"; }
+  string test1(A a)        { return a.name; }
+  string test2(C c)        { return c.name; }
+  string test3(A a1, A a2) { return a1.name ~ ", " ~ a2.name; }
+  string test4(A a, C c)   { return a.name ~ ", " ~ c.name; }
+  string test5(A a, C c)   { return a.name ~ ", " ~ c.name; }
 }
 
 unittest {
-  B b1 = B("bee1");
-  B b2 = B("bee2");
+  B b1 = B("b1");
+  B b2 = B("b2");
+  C c  = C("c");
+  D d  = D("d");
 
-  mixin Facade!(test1, A, B);
-  assert("[bee1(A)]" == test1(b1));
+  auto test1 = facade!(test1, B, A);
+  assert("b1(A)" == test1(b1));
 
-  mixin Facade!(test2, A, B);
-  assert("[bee1(A), bee2(A)]" == test2(b1, b2));
+  auto test2 = facade!(test2, B, A);
+  assert("c" == test2(c));
 
-  mixin Facade!(test3, A, B);
-  assert("[bee1(A), bee2]" == test3(b1, b2));
+  auto test3 = facade!(test3, B, A);
+  assert("b1(A), b2(A)" == test3(b1, b2));
+
+  auto test4 = facade!(test4, B, A);
+  assert("b1(A), c" == test4(b1, c));
+
+  auto test5 = facade!(test5, B, A, D, C);
+  assert("b1(A), d(C)" == test5(b1, d));
 }
 
 /**
  * TODO: Documentation here
  */
-mixin template Facade(alias target, To, From) {
-  mixin("ReturnType!target " ~ unqualifiedName!target ~
-        "(translateTypes!(To, From, ParameterTypeTuple!target) params) " ~
-        "{ return facade!(target, To, From)(params); }");
+template facade(alias target, Map...) {
+  alias facadeImpl!(target, Map).result facade;
 }
 
-// facade
-unittest {
-  B b1 = B("bee1");
-  B b2 = B("bee2");
+private:
 
-  assert("[bee1(A)]"          == facade!(test1, A, B)(b1));
-  assert("[bee1(A), bee2(A)]" == facade!(test2, A, B)(b1, b2));
-  assert("[bee1(A), bee2]"    == facade!(test3, A, B)(b1, b2));
-}
+template facadeImpl(alias target, Map...) {
+  alias ReturnType!target                      R;
+  alias ParameterTypeTuple!target              OldTypes;
+  alias translateTypes!(Tuple!(Map), OldTypes) NewTypes;
 
-template facade(alias target, To, From) {
-  alias facadeImpl!(target, To, From).result facade;
-}
-
-// facadeImpl
-template facadeImpl(alias target, To, From) {
-  alias ReturnType!target                   R;
-  alias ParameterTypeTuple!target           OldTypes;
-  alias translateTypes!(To, From, OldTypes) NewTypes;
-
-  R result(NewTypes params) {
+  enum result = function R(NewTypes params) {
     return target(tupleCast!(Tuple!OldTypes)(params).field);
-  }
+  };
 }
 
 // translateTypes
@@ -78,37 +80,44 @@ unittest {
   struct B {}
   struct C {}
 
-  static assert(is(B == translateTypes!(A, B, A)));
-  static assert(is(TypeTuple!(B, B) == translateTypes!(A, B, A, A)));
-  static assert(is(TypeTuple!(B, B) == translateTypes!(A, B, A, B)));
-  static assert(is(C == translateTypes!(A, B, C)));
+  static assert(is(TypeTuple!(B)       == translateTypes!(Tuple!(B, A), A)));
+  static assert(is(TypeTuple!(B, B)    == translateTypes!(Tuple!(B, A), A, A)));
+  static assert(is(TypeTuple!(B, B)    == translateTypes!(Tuple!(B, A), A, B)));
+  static assert(is(TypeTuple!(C)       == translateTypes!(Tuple!(B, A), C)));
+  static assert(is(TypeTuple!(C, C, C) == translateTypes!(Tuple!(C, A, C, B), A, B, C)));
 }
 
-template translateTypes(From, To, Types...) {
-  static if (Types.length == 1) {
-    alias translateType!(From, To, Types[0]) translateTypes;
+template translateTypes(Map, Types...) {
+  static if (Types.length == 0) {
+    alias TypeTuple!() translateTypes;
   } else {
-    alias TypeTuple!(translateType!(From, To, Types[0]), translateTypes!(From, To, Types[1 .. $]))
+    alias TypeTuple!(translateType!(Map, Types[0]), translateTypes!(Map, Types[1 .. $]))
           translateTypes;
   }
 }
 
 private
 
-// unqualifiedName
+// translateType
 unittest {
-  int a;
+  struct A {}
+  struct B {}
+  struct C {}
 
-  struct Outer {
-    static int inner;
-  }
-
-  static assert("a"     == unqualifiedName!a);
-  static assert("inner" == unqualifiedName!(Outer.inner));
+  static assert(is(B == translateType!(Tuple!(B, A), A)));
+  static assert(is(B == translateType!(Tuple!(B, A), B)));
+  static assert(is(C == translateType!(Tuple!(B, A), C)));
+  static assert(is(C == translateType!(Tuple!(C, A, C, B), A)));
 }
 
-template unqualifiedName(alias E) {
-  enum unqualifiedName = demodulize(__traits(identifier, E));
+template translateType(Map, T) {
+  static assert(Map.Types.length % 2 == 0, "Translation map must have even number of types");
+
+  static if (Map.Types.length == 0) {
+    alias T translateType;
+  } else {
+    alias translateType!(Tuple!(Map.Types[2 .. $]), translateType!(Map.Types[0], Map.Types[1], T)) translateType;
+  }
 }
 
 // translateType
@@ -117,12 +126,12 @@ unittest {
   struct B {}
   struct C {}
 
-  static assert(is(B == translateType!(A, B, A)));
-  static assert(is(B == translateType!(A, B, B)));
-  static assert(is(C == translateType!(A, B, C)));
+  static assert(is(B == translateType!(B, A, A)));
+  static assert(is(B == translateType!(B, A, B)));
+  static assert(is(C == translateType!(B, A, C)));
 }
 
-template translateType(From, To, T) {
+template translateType(To, From, T) {
   static if (is(T == From)) {
     alias To translateType;
   } else {
@@ -156,12 +165,11 @@ unittest {
   C c2 = C("cee2");
 
   auto r1 = tupleCast!(Tuple!A)(c1);
-  assert(is(A == typeof(r1.field[0])));
+  assert(is(Tuple!(A) == typeof(r1)));
   assert("cee1" == r1.field[0].name);
 
   auto r2 = tupleCast!(Tuple!(A, B))(c1, c2);
-  assert(is(A == typeof(r2.field[0])));
-  assert(is(B == typeof(r2.field[1])));
+  assert(is(Tuple!(A, B) == typeof(r2)));
   assert("cee1" == r2.field[0].name);
   assert("cee2" == r2.field[1].name);
 }
@@ -175,43 +183,4 @@ To tupleCast(To, From...)(From params) {
 
     return tuple(head, tail.field);
   }
-}
-
-// demodulize
-unittest {
-  assert("foo" == demodulize("foo"));
-  assert("foo" == demodulize("bar.foo"));
-  assert("foo" == demodulize("baz.bar.foo"));
-
-  // CTFE
-  enum name = demodulize("baz.bar.foo");
-  static assert("foo" == name);
-}
-
-pure string demodulize(in string input) {
-  auto last = lastIndexOf(input, '.');
-
-  if (last >= 0) {
-    return input[last + 1 .. $];
-  } else {
-    return input;
-  }
-}
-
-// lastIndexOf
-unittest {
-  assert(-1 == lastIndexOf("",    'a'));
-  assert(-1 == lastIndexOf("foo", 'a'));
-  assert( 0 == lastIndexOf("foo", 'f'));
-  assert( 2 == lastIndexOf("foo", 'o'));
-}
-
-pure int lastIndexOf(in string haystack, char needle) {
-  for (int i = cast(int) haystack.length - 1; i >= 0; --i) {
-    if (haystack[i] == needle) {
-      return i;
-    }
-  }
-
-  return -1;
 }

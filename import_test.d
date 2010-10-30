@@ -17,6 +17,6 @@ version(unittest) {
 unittest {
   A a;
 
-  mixin Facade!(test, string, A);
+  auto test = facade!(test, A, string);
   assert("test: A" == test(a));
 }
