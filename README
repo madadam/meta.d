@@ -1,10 +1,10 @@
-Function facade generator for D
+Function adapter generator for D
 ===============================
 
 What the hell is this?
 ----------------------
 
-This is a D language library for declaratively generating function facades.
+This is a D language library for declaratively generating function adapters.
 See the embeded documentation for more info.
 
 TODO

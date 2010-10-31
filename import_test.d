@@ -1,12 +1,10 @@
-// This file's sole purpose is to test that Facade works also when imported into other module.
+// This file's sole purpose is to test that Adapter works also when imported into other module.
 
 version(unittest) {
-  import function_facade;
+  import adapter;
 
   struct A {
-    string opCast(T:string)() {
-      return "A";
-    }
+    string opCast(T:string)() { return "A"; }
   }
 
   string test(string s) {
@@ -17,6 +15,6 @@ version(unittest) {
 unittest {
   A a;
 
-  auto test = facade!(test, A, string);
+  mixin Adapter!(test, A, string);
   assert("test: A" == test(a));
 }

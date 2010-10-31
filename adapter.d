@@ -1,4 +1,4 @@
-module function_facade;
+module adapter;
 
 import std.conv;
 import std.traits;
@@ -21,10 +21,13 @@ version(unittest) {
   struct D {
     string name;
 
-    C opCast(T:C)() {
-      return C(this.name ~ "(C)");
-    }
+    C opCast(T:C)() { return C(this.name ~ "(C)"); }
   }
+
+  B b1 = B("b1");
+  B b2 = B("b2");
+  C c  = C("c");
+  D d  = D("d");
 
   string test1(A a)        { return a.name; }
   string test2(C c)        { return c.name; }
@@ -34,52 +37,78 @@ version(unittest) {
 }
 
 unittest {
-  B b1 = B("b1");
-  B b2 = B("b2");
-  C c  = C("c");
-  D d  = D("d");
+  mixin Adapter!(test1, B, A);
+  mixin Adapter!(test2, B, A);
+  mixin Adapter!(test3, B, A);
+  mixin Adapter!(test4, B, A);
+  mixin Adapter!(test5, B, A, D, C);
 
-  auto test1 = facade!(test1, B, A);
-  assert("b1(A)" == test1(b1));
-
-  auto test2 = facade!(test2, B, A);
-  assert("c" == test2(c));
-
-  auto test3 = facade!(test3, B, A);
+  assert("b1(A)"        == test1(b1));
+  assert("c"            == test2(c));
   assert("b1(A), b2(A)" == test3(b1, b2));
-
-  auto test4 = facade!(test4, B, A);
-  assert("b1(A), c" == test4(b1, c));
-
-  auto test5 = facade!(test5, B, A, D, C);
-  assert("b1(A), d(C)" == test5(b1, d));
+  assert("b1(A), c"     == test4(b1, c));
+  assert("b1(A), d(C)"  == test5(b1, d));
 }
 
 /**
  * TODO: Documentation here
  */
-template facade(alias target, Map...) {
-  alias facadeImpl!(target, Map).result facade;
+mixin template Adapter(alias target, Map...) {
+  mixin("AdapterReturnType!(target, Map) " ~ unqualifiedName!target ~
+        "(AdapterParameterTypes!(target, Map) params)" ~
+        "{ return invokeAdapter!(target, Map)(params); }");
+}
+
+// invokeAdapter
+unittest {
+  assert("b1(A)"        == invokeAdapter!(test1, B, A)(b1));
+  assert("c"            == invokeAdapter!(test2, B, A)(c));
+  assert("b1(A), b2(A)" == invokeAdapter!(test3, B, A)(b1, b2));
+  assert("b1(A), c"     == invokeAdapter!(test4, B, A)(b1, c));
+  assert("b1(A), d(C)"  == invokeAdapter!(test5, B, A, D, C)(b1, d));
+}
+
+template invokeAdapter(alias target, Map...) {
+  // XXX: Seems like the invokeAdapterImpl should not be needed here, as the definition
+  // could go directly here, but then it does not work. Perhaps a bug in D?
+  alias invokeAdapterImpl!(target, Map) invokeAdapter;
+}
+
+template invokeAdapterImpl(alias target, Map...) {
+  AdapterReturnType!(target, Map) invokeAdapterImpl(AdapterParameterTypes!(target, Map) params) {
+    return target(tupleCast!(Tuple!(ParameterTypeTuple!target))(params).field);
+  }
+}
+
+// AdapterReturnType
+unittest {
+  static assert(is(string == AdapterReturnType!(test1, B, A)));
+  static assert(is(string == AdapterReturnType!(test5, B, A, D, C)));
+}
+
+template AdapterReturnType(alias target, Map...) {
+  // Note: Currently does not use the Map types at all, but in the future it might use
+  // them to translate also the return type.
+  alias ReturnType!target AdapterReturnType;
+}
+
+// AdapterParameterTypes
+unittest {
+  static assert(is(TypeTuple!(B)    == AdapterParameterTypes!(test1, B, A)));
+  static assert(is(TypeTuple!(C)    == AdapterParameterTypes!(test2, B, A)));
+  static assert(is(TypeTuple!(B, B) == AdapterParameterTypes!(test3, B, A)));
+  static assert(is(TypeTuple!(B, C) == AdapterParameterTypes!(test4, B, A)));
+  static assert(is(TypeTuple!(B, D) == AdapterParameterTypes!(test5, B, A, D, C)));
+}
+
+template AdapterParameterTypes(alias target, Map...) {
+  alias translateTypes!(Tuple!(Map), ParameterTypeTuple!target) AdapterParameterTypes;
 }
 
 private:
 
-template facadeImpl(alias target, Map...) {
-  alias ReturnType!target                      R;
-  alias ParameterTypeTuple!target              OldTypes;
-  alias translateTypes!(Tuple!(Map), OldTypes) NewTypes;
-
-  enum result = function R(NewTypes params) {
-    return target(tupleCast!(Tuple!OldTypes)(params).field);
-  };
-}
-
 // translateTypes
 unittest {
-  struct A {}
-  struct B {}
-  struct C {}
-
   static assert(is(TypeTuple!(B)       == translateTypes!(Tuple!(B, A), A)));
   static assert(is(TypeTuple!(B, B)    == translateTypes!(Tuple!(B, A), A, A)));
   static assert(is(TypeTuple!(B, B)    == translateTypes!(Tuple!(B, A), A, B)));
@@ -183,4 +212,20 @@ To tupleCast(To, From...)(From params) {
 
     return tuple(head, tail.field);
   }
+}
+
+// unqualifiedName
+unittest {
+  int global;
+
+  struct Outer {
+    static int inner;
+  }
+
+  static assert("global" == unqualifiedName!global);
+  static assert("inner"  == unqualifiedName!(Outer.inner));
+}
+
+template unqualifiedName(alias symbol) {
+  const unqualifiedName = __traits(identifier, symbol);
 }
