@@ -1,10 +1,11 @@
-module adapter;
+module meta.adapter;
 
 import std.conv;
 import std.traits;
 import std.typecons;
 import std.typetuple;
 
+// adapt
 version(unittest) {
   import std.stdio;
 
@@ -37,48 +38,63 @@ version(unittest) {
 }
 
 unittest {
-  mixin Adapter!(test1, B, A);
-  mixin Adapter!(test2, B, A);
-  mixin Adapter!(test3, B, A);
-  mixin Adapter!(test4, B, A);
-  mixin Adapter!(test5, B, A, D, C);
+  auto test1 = &adapt!(test1, B, A);
+  assert("b1(A)" == test1(b1));
 
-  assert("b1(A)"        == test1(b1));
-  assert("c"            == test2(c));
+  auto test2 = &adapt!(test2, B, A);
+  assert("c" == test2(c));
+
+  auto test3 = &adapt!(test3, B, A);
   assert("b1(A), b2(A)" == test3(b1, b2));
-  assert("b1(A), c"     == test4(b1, c));
-  assert("b1(A), d(C)"  == test5(b1, d));
+
+  auto test4 = &adapt!(test4, B, A);
+  assert("b1(A), c" == test4(b1, c));
+
+  auto test5 = &adapt!(test5, B, A, D, C);
+  assert("b1(A), d(C)" == test5(b1, d));
+}
+
+// make sure adapt can be used at compile time.
+version(unittest) {
+  enum compileTime = &adapt!(test1, B, A);
+}
+
+unittest {
+  assert("b1(A)" == compileTime(b1));
 }
 
 /**
  * TODO: Documentation here
  */
-mixin template Adapter(alias target, Map...) {
-  mixin("AdapterReturnType!(target, Map) " ~ unqualifiedName!target ~
-        "(AdapterParameterTypes!(target, Map) params)" ~
-        "{ return invokeAdapter!(target, Map)(params); }");
-}
-
-// invokeAdapter
-unittest {
-  assert("b1(A)"        == invokeAdapter!(test1, B, A)(b1));
-  assert("c"            == invokeAdapter!(test2, B, A)(c));
-  assert("b1(A), b2(A)" == invokeAdapter!(test3, B, A)(b1, b2));
-  assert("b1(A), c"     == invokeAdapter!(test4, B, A)(b1, c));
-  assert("b1(A), d(C)"  == invokeAdapter!(test5, B, A, D, C)(b1, d));
-}
-
-template invokeAdapter(alias target, Map...) {
-  // XXX: Seems like the invokeAdapterImpl should not be needed here, as the definition
-  // could go directly here, but then it does not work. Perhaps a bug in D?
-  alias invokeAdapterImpl!(target, Map) invokeAdapter;
-}
-
-template invokeAdapterImpl(alias target, Map...) {
-  AdapterReturnType!(target, Map) invokeAdapterImpl(AdapterParameterTypes!(target, Map) params) {
+template adapt(alias target, Map...) {
+  AdapterReturnType!(target, Map) adapt(AdapterParameterTypes!(target, Map) params) {
     return target(tupleCast!(Tuple!(ParameterTypeTuple!target))(params).field);
   }
 }
+
+// Adapt mixin
+unittest {
+  mixin Adapt!(test1, B, A);
+  assert("b1(A)" == test1(b1));
+
+  mixin Adapt!(test2, B, A);
+  assert("c" == test2(c));
+
+  mixin Adapt!(test3, B, A);
+  assert("b1(A), b2(A)" == test3(b1, b2));
+
+  mixin Adapt!(test4, B, A);
+  assert("b1(A), c" == test4(b1, c));
+
+  mixin Adapt!(test5, B, A, D, C);
+  assert("b1(A), d(C)"  == test5(b1, d));
+}
+
+mixin template Adapt(alias target, Map...) {
+  mixin("auto " ~ unqualifiedName!target ~ " = &adapt!(target, Map);");
+}
+
+private:
 
 // AdapterReturnType
 unittest {
@@ -104,8 +120,6 @@ unittest {
 template AdapterParameterTypes(alias target, Map...) {
   alias translateTypes!(Tuple!(Map), ParameterTypeTuple!target) AdapterParameterTypes;
 }
-
-private:
 
 // translateTypes
 unittest {
