@@ -1,2 +1,5 @@
+TEST = rdmd -unittest -w --main
+
 test:
-	rdmd -unittest -w --main adapter.d
+	$(TEST) adapter.d
+	$(TEST) attribute.d
