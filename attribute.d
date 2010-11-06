@@ -1,5 +1,7 @@
 module meta.attribute;
 
+import std.algorithm;
+
 // attributeReader
 unittest {
   class Widget {
@@ -31,9 +33,9 @@ unittest {
   assert("foo" == widget.name);
 }
 
-template attributeReader(T, string name) {
-  enum attributeReader = attributeVariable!T(name) ~
-                         attributeReaderFunction!T(name);
+template attributeReader(T, names...) {
+  enum attributeReader = attributeVariable!(T, names) ~
+                         attributeReaderFunction!(T, names);
 }
 
 // attributeWriter
@@ -69,9 +71,9 @@ unittest {
   assert("foo" == widget.name);
 }
 
-template attributeWriter(T, string name) {
-  enum attributeWriter = attributeVariable!T(name) ~
-                         attributeWriterFunction!T(name);
+template attributeWriter(T, names...) {
+  enum attributeWriter = attributeVariable!(T, names) ~
+                         attributeWriterFunction!(T, names);
 }
 
 // attributeAccessor
@@ -86,24 +88,55 @@ unittest {
   assert("foo" == widget.name);
 }
 
-template attributeAccessor(T, string name) {
-  enum attributeAccessor = attributeVariable!T(name) ~
-                           attributeReaderFunction!T(name) ~
-                           attributeWriterFunction!T(name);
+template attributeAccessor(T, names...) {
+  enum attributeAccessor = attributeVariable!(T, names) ~
+                           attributeReaderFunction!(T, names) ~
+                           attributeWriterFunction!(T, names);
 }
 
+// multiple arguments
+unittest {
+  class User {
+    mixin(attributeAccessor!(string, "firstName", "lastName"));
+  }
+
+  auto user = new User;
+
+  assert("sheldon" == (user.firstName = "sheldon"));
+  assert("cooper"  == (user.lastName  = "cooper"));
+
+  assert("sheldon" == user.firstName);
+  assert("cooper"  == user.lastName);
+}
 
 
 // helpers
 
-private string attributeReaderFunction(T)(string name) {
-  return "@property " ~ T.stringof ~ " " ~ name ~ "() { return this._" ~ name ~ "; }";
+private string attributeReaderFunction(T)() {
+  return "";
 }
 
-private string attributeWriterFunction(T)(string name) {
-  return "@property " ~ T.stringof ~ " " ~ name ~ "(" ~ T.stringof ~ " value) { return this._" ~ name ~ " = value; }";
+private string attributeReaderFunction(T, string name, names...)() {
+  return "@property " ~ T.stringof ~ " " ~ name ~ "() { return this._" ~ name ~ "; }" ~
+    attributeReaderFunction!(T, names);
 }
 
-private string attributeVariable(T)(string name) {
-  return "private " ~ T.stringof ~ " _" ~ name ~ ";";
+
+
+private string attributeWriterFunction(T)() {
+  return "";
+}
+
+private string attributeWriterFunction(T, string name, names...)() {
+  return "@property " ~ T.stringof ~ " " ~ name ~ "(" ~ T.stringof ~ " value) { return this._" ~ name ~ " = value; }" ~ attributeWriterFunction!(T, names);
+}
+
+
+
+private string attributeVariable(T)() {
+  return "";
+}
+
+private string attributeVariable(T, string name, names...)() {
+  return "private " ~ T.stringof ~ " _" ~ name ~ ";" ~ attributeVariable!(T, names);
 }
