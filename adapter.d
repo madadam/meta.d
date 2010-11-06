@@ -2,7 +2,6 @@ module meta.adapter;
 
 import std.conv;
 import std.traits;
-import std.typecons;
 import std.typetuple;
 
 // adapt
@@ -68,7 +67,7 @@ unittest {
  */
 template adapt(alias target, Map...) {
   AdapterReturnType!(target, Map) adapt(AdapterParameterTypes!(target, Map) params) {
-    return target(tupleCast!(Tuple!(ParameterTypeTuple!target))(params).field);
+    return target(tupleCast!(Tuple!(ParameterTypeTuple!target))(params).tupleof);
   }
 }
 
@@ -209,23 +208,35 @@ unittest {
 
   auto r1 = tupleCast!(Tuple!A)(c1);
   assert(is(Tuple!(A) == typeof(r1)));
-  assert("cee1" == r1.field[0].name);
+  assert("cee1" == r1[0].name);
 
   auto r2 = tupleCast!(Tuple!(A, B))(c1, c2);
   assert(is(Tuple!(A, B) == typeof(r2)));
-  assert("cee1" == r2.field[0].name);
-  assert("cee2" == r2.field[1].name);
+  assert("cee1" == r2[0].name);
+  assert("cee2" == r2[1].name);
 }
 
 To tupleCast(To, From...)(From params) {
-  static if (params.length == 1) {
-    return tuple(cast(To.Types[0]) params[0]);
+  static if (params.length == 0) {
+    return tuple();
   } else {
     auto head = cast(To.Types[0]) params[0];
     auto tail = tupleCast!(Tuple!(To.Types[1 .. $]))(params[1 .. $]);
 
-    return tuple(head, tail.field);
+    return tuple(head, tail.tupleof);
   }
+}
+
+// Simplified version of std.typecons.Tuple
+struct Tuple(T...) {
+  alias T Types;
+
+  T fields;
+  alias fields this;
+};
+
+Tuple!T tuple(T...)(T values) {
+  return Tuple!(T)(values);
 }
 
 // unqualifiedName
